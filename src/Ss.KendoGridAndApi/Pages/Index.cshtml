@@ -1,0 +1,108 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<aside>
+    <form method="get" data-bind="events: { submit: read }">
+        <div class="mb-3">
+            <label for="userId" class="form-label">User ID</label>
+            <input id="userId" name="userId" type="text" data-bind="value: userId" class="form-control me-3"/>
+        </div>
+
+        <button type="submit" data-bind="click: read" class="btn btn-secondary">Refresh</button>
+    </form>
+</aside>
+
+<hr class="w-25 my-3 mx-auto"/>
+
+<div id="grid"></div>
+
+<script type="text/javascript">
+    'use strict';
+    let grid = undefined;
+
+    const filters = kendo.observable({
+        userId: 1,
+        read(e) {
+            e.preventDefault();
+            console.log('filter.read', arguments);
+            grid.dataSource.read();
+        },
+    });
+
+    kendo.bind($('aside'), filters);
+
+  // Have read this note:
+  // All transport actions (read, update, create, destroy) must be defined in the same way,
+  // that is, as functions or as objects. Mixing the different configuration alternatives is not possible.
+  // https://docs.telerik.com/kendo-ui/api/javascript/data/datasource/configuration/transport.create#transportcreate
+
+  // attempt 1: Tried to make transport.(create|read|update|destroy).url as functions
+  // > didn't work
+
+  // attempt 2: tried to make transport.(create|read|update|destroy) as functions
+  // > didn't work
+
+  // attempt 3: need a way to set parameterMap similar to how webapi transport does
+  // > not sure how
+
+    grid = $("#grid").kendoGrid({
+      editable: "inline",
+      sortable: true,
+      filterable: true,
+      groupable: true,
+      columns: [ 'id', 'name', 'done',  { command: ["edit", "destroy"] } ],
+      dataSource: {
+          // allow custom binding of DataSourceRequest,
+          // without which cannot filter dynamically for the grid
+          //type: 'webapi',
+
+          serverFiltering: true,
+          serverPaging: true,
+          serverSorting: true,
+          serverGrouping: true,
+          serverAggregates: true,
+
+          schema: {
+            data: "data",
+            total: "total",
+            errors: "errors",
+            model: { id: "id" },
+          },
+
+          // this works, but can't change parameters dynamically
+          // nor send sort/page/filter query strings that can bind to DataSourceRequest
+          //
+          // transport: {
+          //   read: '/api/users/-1/todos'.replace('-1', filters.get('userId')),
+          //   update: '/api/users/{0}/todos/{1}', // how do I set 2 parameters?
+          // },
+
+          // this doesn't get called when dataSource.type isn't 'webapi'
+          transport: {
+              read(options) {
+                  const url = '/api/users/-1/todos'.replace('-1', filters.get('userId'));
+
+                  console.log('transport.read', url, arguments);
+
+                   $.ajax({ url }).done(r => options.success(r)).fail(e => options.error(e));
+              },
+              update(options) {
+                // How do I set multiple parameters here without using dataSource.type = 'webapi'?
+                const url = kendo.format('/api/users/{0}/todos/{1}',
+                    filters.get('userId'),
+                    options.data.id);
+
+                const payload = JSON.stringify(options.data)
+
+                console.log('transport.update', url, arguments);
+
+                return $.ajax({ method: 'post', url, data: payload, contentType: 'application/json' }).done(r => options.success(r)).fail(e => options.error(e));
+              },
+          },
+      },
+    })
+    .data('kendoGrid');
+    </script>
